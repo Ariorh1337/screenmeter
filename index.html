@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>ScreenMeter v3.5.3</title>
+    <style>
+        body {
+            background-color: white;
+            overflow: scroll;
+            overflow-y: initial;
+        }
+        
+        body,
+        select {
+            font-family: sans-serif;
+            font-size: 14px;
+        }
+        
+         ::-webkit-scrollbar {
+            width: 0px;
+        }
+        
+        input,
+        label {
+            display: block;
+            width: 100%;
+        }
+        
+        button {
+            color: white;
+            background-color: #4285f4;
+            border: none;
+            outline: none;
+            border-radius: 5px;
+            padding: 5px;
+        }
+        
+        #start-timer-button,
+        #stop-timer-button,
+        #login-button {
+            font-size: 18px;
+            cursor: pointer;
+        }
+        
+        #start-timer-button {
+            background-color: darkorange;
+        }
+        
+        #stop-timer-button {
+            background-color: red;
+        }
+        
+        #add-task-button,
+        #mark-task-button {
+            background-color: transparent;
+            color: #4285f4;
+            font-style: bold;
+            font-size: 14px;
+            font-weight: bold;
+            margin: 0px;
+            margin-top: 10px;
+            margin-left: 10px;
+            padding: 0px;
+            cursor: pointer;
+        }
+        
+        #logout-button {
+            background-color: transparent;
+            color: #4285f4;
+            font-style: bold;
+            font-size: 12px;
+            font-weight: bold;
+            margin-left: 0px;
+            padding: 0px;
+            cursor: pointer;
+        }
+        
+        #mark-task-button {
+            color: green;
+            cursor: pointer;
+        }
+        
+        label.inline-label {
+            display: inline-block;
+            width: auto;
+        }
+        
+        .flex-container {
+            display: flex;
+            flex-direction: row;
+            justify-content: flex-start;
+            flex-wrap: wrap;
+        }
+        
+        .flex-20 {
+            box-sizing: border-box;
+            width: 19%;
+        }
+        
+        .flex-80 {
+            box-sizing: border-box;
+            width: 79%;
+        }
+        
+        h1 {
+            display: inline;
+        }
+        
+        button,
+        label {
+            margin-top: 10px;
+        }
+        
+        #notification {
+            top: 10px;
+            left: 50%;
+            width: 250px;
+            padding: 10px;
+            margin-left: -135px;
+            /*set to a negative number 1/2 of your width*/
+            border: 1px solid #ccc;
+            background-color: #f3f3f3;
+            position: fixed;
+            z-index: 999;
+        }
+        
+        .v-select .dropdown-menu {
+            height: 200px;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="app">
+        <div v-if="notTitle" id="notification">
+            <h4>{{notTitle}}</h4>
+            <p>{{notMessage}}</p>
+            <div style="text-align: center;"><button v-on:click="closeNotification">Ok</button></div>
+        </div>
+
+        <img width='200' src="logo-inverted.png" />
+
+        <div v-if="mode==='login'">
+            <label>Login Id</label>
+            <input v-bind:readonly="loginErrorMessage == 'Please wait...'" v-model='inputLoginId' type="text" />
+            <label>Password</label>
+            <input v-bind:readonly="loginErrorMessage == 'Please wait...'" v-model='inputPassword' type="password">
+            <div style="text-align: center;">
+                <button v-if="loginErrorMessage != 'Please wait...'" id="login-button" v-on:click="login">Login</button>
+
+                <label v-if="loginErrorMessage">{{loginErrorMessage}}</label>
+            </div>
+        </div>
+
+        <div v-if="mode==='addtask'">
+            <label>What will you be working on?</label>
+            <input style="border: 1px solid black; padding:3px;" v-bind:readonly="addTaskInProgress" maxlength="400" v-model='inputTaskName' type="text">
+            <button v-show="!addTaskInProgress" v-on:click="addTask">Save</button>
+            <button v-show="!addTaskInProgress" v-on:click="cancelAddTask">Cancel</button>
+            <span v-show="addTaskInProgress">Please wait..</span>
+        </div>
+        <div v-if="mode==='timer'">
+            <div>Logged in as <strong>{{loginData.UserName}}</strong>&nbsp;<button id="logout-button" v-on:click="logout" v-if="!timerRunning">Logout</button> </div>
+
+            <div v-if="!timerRunning && totalTimeString">Total Time: <strong>{{totalTimeString}} </strong> since login.</div>
+
+            <div>Status:
+                <strong>
+                <span style="color:green;" v-if="syncPackets.length===0"> synced </span>
+                <span v-if="connStatus==='online'">
+                  <span style="color:orange;" v-if="syncPackets.length>0"> syncing </span>
+                </span>
+                <span style="color:red;" v-if="connStatus!=='online'">
+                  <span v-if="syncPackets.length>0">saving data offline</span>
+                </span> 
+              </strong>
+            </div>
+
+            <label>Project</label>
+
+            <div>
+                <select v-bind:disabled="timerRunning" style="width:99%" @change="loadProjectTasks" v-model="user.activeProject">
+                <option v-for="option in user.ProjectDataSet" v-bind:value="option">
+                  {{ option.projectName }}
+                </option>
+              </select>
+            </div>
+
+            <div class="flex-container">
+                <div class="flex-20">
+                    <label class="inline-label ">Task</label>
+                </div>
+                <div class="flex-80" style="text-align: right;">
+                    <button id="mark-task-button" v-on:click="markTask" v-if="!timerRunning && !markTaskInProgress">✓Mark Complete</button>
+                    <button id="add-task-button" v-on:click="openAddTaskPrompt" v-if="!timerRunning">+New Task</button>
+                </div>
+            </div>
+
+            <div>
+                <select v-bind:disabled="timerRunning" style="width:99%" v-model="user.activeTask">
+                <option v-for="option in user.activeProject.openTasks" v-bind:value="option">
+                  {{ option.taskName }}
+                </option>
+              </select>
+            </div>
+
+            <div style="text-align: center;">
+                <span style="margin: 10px;" v-if="markTaskInProgress"> <br />Please wait..</span>
+                <span style="margin: 10px;" v-if="timerRunning"> <br />{{timeElapsedString}}</span>
+                <button id="start-timer-button" v-on:click="startTimer" v-if="!timerRunning && !markTaskInProgress">Start Timer</button>
+                <button id="stop-timer-button" v-on:click="stopTimer" v-if="timerRunning">Stop Timer</button>
+            </div>
+        </div>
+
+        <div v-if="mode==='idle'">
+            <label>ScreenMeter detected that you did not interact with the computer for a while. Were you working ?</label>
+            <button v-on:click="wasWorking">Was Working</button>
+            <button v-on:click="wasOnBreak">Was On Break</button>
+        </div>
+
+        <div v-if="mode==='incorrecttime'">
+            <label>Your computer time/timezone is incorrectly set. Please correct your computer time/timezone and restart ScreenMeter.</label>
+        </div>
+    </div>
+
+    <div id="total-time" style="width: 100%; margin-top: 8px; text-align: center;"></div>
+    <img id="screenshoter" src="#" style="width: 100%; height: 100%; margin-top: 8px;">
+
+    <script src="renderer.js"></script>
+</body>
+
+</html>
