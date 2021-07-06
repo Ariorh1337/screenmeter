@@ -5,23 +5,17 @@ Vue = require('vue/dist/vue.js')
 require('vue-resource')
 const uuidv4 = require('uuid/v4');
 
-const {
-    ipcRenderer
-} = require('electron');
-var vSelect = require('vue-select/dist/vue-select.js').VueSelect;
+const { login, logout, saveLoginData, webAuthorization } = require("./modules/authorization");
+
+const { ipcRenderer } = require('electron');
 const electron = require('electron');
-const notifier = require('electron-notifications')
 const desktopCapturer = electron.desktopCapturer
 const electronScreen = electron.screen
-const nativeImage = electron.nativeImage
 const storage = require('electron-json-storage');
 const dialog = require('electron').remote.dialog;
 const BrowserWindow = require('electron').remote.BrowserWindow;
 
 var $ = require("jquery");
-const dataVersion = "1";
-
-var lastStoppedAlertTime = 0;
 
 Vue.http.options.root = 'https://www.screenmeter.com/';
 
@@ -89,6 +83,11 @@ var app = new Vue({
     }
 });
 
+const notifier = require('node-notifier'); //breakNotification
+let silenced = false, lastStoppedAlertTime = 0; //breakNotification
+const { breakNotification } = require("./modules/breakNotifier");
+setInterval(breakNotification, 60000);
+
 function msToHMS(ms) {
     // 1- Convert to seconds:
     var seconds = Math.floor(parseInt(ms) / 1000);
@@ -105,65 +104,6 @@ function msToHMS(ms) {
 function saveSyncPackets() {
     var datatosave = JSON.parse(JSON.stringify(app.syncPackets));
     storage.set('syncPackets', datatosave, function(error) {});
-}
-
-function saveLoginData() {
-    var datatosave = JSON.parse(JSON.stringify(app.loginData));
-    //console.log("Saving login data",datatosave);
-    storage.set("loginData", datatosave, function(error) {});
-}
-
-function logout() {
-    var confirmMessage = "Are you sure you want to log out? Logging in again will require an active internet connection. ";
-    if (app.syncPackets.length > 0) {
-        confirmMessage = "You have unsaved offline data which will be deleted. " + confirmMessage;
-    }
-    if (confirm(confirmMessage)) {
-        app.syncPackets = [],
-            saveSyncPackets(),
-            app.inputLoginId = "";
-        app.inputPassword = "";
-        app.mode = "login";
-        app.loginData = {};
-        saveLoginData();
-        app.processQueueLock = false;
-    }
-}
-
-function login() {
-    loginData = {
-        UserName: app.inputLoginId,
-        ActiveProjectId: -1,
-        Password: app.inputPassword,
-        LoginAuxData: "SMElectronv0"
-    }
-
-    app.loginErrorMessage = "Please wait...";
-
-    return Vue.http.post('api/Login', loginData).then(
-        (response) => {
-            console.log("login returned");
-
-            app.user = response.data;
-
-            if (app.user.activeProject && app.user.activeProject.openTasks && app.user.activeProject.openTasks.length > 0) {
-                Vue.set(app.user, 'activeTask', app.user.activeProject.openTasks[0]);
-            }
-            app.loginErrorMessage = "";
-            app.mode = "timer";
-            app.loginData = loginData;
-            saveLoginData();
-        },
-        (reason) => {
-            app.mode = 'login';
-
-            if (reason.body) {
-                app.loginErrorMessage = reason.body.Message.split(":")[1];
-            } else {
-                app.loginErrorMessage = "Please connect to the Internet and try again."
-            }
-        }
-    );
 }
 
 function loadProjectTasks() {
@@ -275,15 +215,6 @@ function queueSyncPacket(screenshot, isStartLog) {
     saveSyncPackets();
 }
 
-function determineScreenShotSize() {
-    const screenSize = electronScreen.getPrimaryDisplay().workAreaSize
-    const maxDimension = Math.max(screenSize.width, screenSize.height)
-    return {
-        width: maxDimension * window.devicePixelRatio,
-        height: maxDimension * window.devicePixelRatio
-    }
-}
-
 function addTask() {
     if (app.addTaskInProgress) {
         return;
@@ -386,7 +317,6 @@ function uploadImageToS3(dataURL, signedURL, ky) {
     });
 }
 
-var lockTime = 0;
 var processQueueCount = 0;
 
 function processQueue() {
@@ -714,43 +644,9 @@ function timeWatchdog() {
     app.lastWatchdogTick = dtw.getTime();
 }
 
-
 timeWatchdog();
 
-var silenced = false;
-
-var icondataurl = "";
-
-setInterval(function() {
-    console.log("Stopped check monitor called");
-    if (silenced || app.timerRunning) {
-        return;
-    }
-
-    var dtsta = new Date();
-
-    if ((dtsta.getTime() - lastStoppedAlertTime) < 40000) {
-        return;
-    }
-
-    const notification = notifier.notify('On a break', {
-        message: 'ScreenMeter is not logging time.',
-        icon: 'https://s3-us-west-2.amazonaws.com/screenmeterinstallers/timeblock.png',
-        buttons: ["Stop Reminding"],
-        duration: 10000
-    });
-
-    lastStoppedAlertTime = dtsta.getTime();
-
-    notification.on('buttonClicked', (text, index) => {
-        notification.close()
-        silenced = true;
-    });
-
-}, 60000);
-
 setInterval(timeWatchdog, watchdogInterval);
-
 
 function checkServerTime() {
     console.log("Server time check called");
@@ -836,46 +732,19 @@ storage.get('loginData', function(error, loginData) {
 
 function getTimeData() {
     fetch("https://www.screenmeter.com/")
-        .then(r => r.text())
-        .then(r => {
+        .then(responce => responce.text())
+        .then(responce => {
             const body = document.createElement("div");
-            body.innerHTML = r;
+            body.innerHTML = responce;
 
             const timeData = body.querySelector(`div[class="row text-left div-table-row"]`);
-            if (!timeData) authorization().then(getData);
-            else {
+            if (!timeData) {
+                webAuthorization().then(getData);
+            } else {
                 const totalTime = document.getElementById("total-time");
                 const currentTime = timeData.querySelector('div[class="visible-sm visible-xs"]').nextElementSibling.textContent;
-                totalTime.innerHTML = `<span>Всего времени за сегодня: ${currentTime}</span>`;
+                totalTime.innerHTML = `<span>Total time today: ${currentTime}</span>`;
             }
         });
 }
 
-function authorization() {
-    return new Promise(resolve => {
-        storage.get('loginData', function(error, loginData) {
-            fetch("https://www.screenmeter.com/Account/Login")
-                .then(r => r.text())
-                .then(r => {
-                    const body = document.createElement("div");
-                    body.innerHTML = r;
-
-                    return body.querySelector('input[name="__RequestVerificationToken"]').getAttribute("value");
-                })
-                .then(authToken => {
-                    return fetch("https://www.screenmeter.com/Account/Login", {
-                        "headers": {
-                            "content-type": "application/x-www-form-urlencoded",
-                        },
-                        "body": `__RequestVerificationToken=${authToken}&UserName=${loginData.UserName}&Password=${loginData.Password}&RememberMe=true`,
-                        "method": "POST",
-                        "credentials": "include"
-                    });
-                })
-                .then(r => r.text())
-                .then(r => {
-                    resolve(true);
-                })
-        });
-    })
-}

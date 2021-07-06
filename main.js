@@ -1,33 +1,24 @@
-const electron = require('electron')
-// Module to control application life.
-const app = electron.app;
+const electron = require('electron');
 
+const app = electron.app;
 app.commandLine.appendSwitch('--enable-viewport-meta', 'true');
 app.commandLine.appendSwitch("disable-renderer-backgrounding");
 app.commandLine.appendSwitch("disable-background-timer-throttling");
+app.setAppUserModelId("com.build80.screenmeter");
 
 const ipcMain = electron.ipcMain;
-app.setAppUserModelId("com.build80.screenmeter");
-// Module to create native browser window.
-const BrowserWindow = electron.BrowserWindow
+const BrowserWindow = electron.BrowserWindow;
+const path = require('path');
+const url = require('url');
 
-const path = require('path')
-const url = require('url')
-
-const {
-  powerSaveBlocker
-} = require('electron')
-// Module to create native browser window.
-
-const pwid = powerSaveBlocker.start('prevent-app-suspension')
-console.log("Power Saver Blocker Started", powerSaveBlocker.isStarted(pwid));
+const { powerSaveBlocker } = require('electron');
+powerSaveBlocker.start('prevent-app-suspension');
 
 // Keep a global reference of the window object, if you don't, the window will
 // be closed automatically when the JavaScript object is garbage collected.
 let mainWindow
 
 function createWindow() {
-  var powerMonitor = electron.powerMonitor;
   // Create the browser window.
   mainWindow = new BrowserWindow({
     width: 300,
@@ -40,9 +31,7 @@ function createWindow() {
     },
   });
 
-  //mainWindow.setMenu(null);
-
-  // and load the index.html of the app.
+  //Load the index.html of the app.
   mainWindow.loadURL(url.format({
     pathname: path.join(__dirname, 'index.html'),
     protocol: 'file:',
@@ -52,17 +41,17 @@ function createWindow() {
   // Open the DevTools.
   //mainWindow.webContents.openDevTools();
 
+  //Remove top menu "File, Edit, View, etc"
+  // mainWindow.setMenu(null);
+
   // Emitted when the window is closed.
   mainWindow.on('closed', function () {
-    // Dereference the window object, usually you would store windows
-    // in an array if your app supports multi windows, this is the time
-    // when you should delete the corresponding element.
     mainWindow = null
     app.exit();
   });
 
+  const powerMonitor = electron.powerMonitor;
   ipcMain.on('idletime-request', (event, arg) => {
-    console.log("Got idle time request"); // prints "ping"
     event.reply('idletime-response', powerMonitor.getSystemIdleTime());
   });
 }
