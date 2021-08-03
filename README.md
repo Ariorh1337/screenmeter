@@ -4,8 +4,8 @@ Added in the current assembly:
 
 1. the time that was spent today (the indicator will take into account the time that was before the program was restarted)
 2. displaying the image that was taken from the screen
-3. removed activity tracking logic
-4. freaze screenshot logic
+3. removed activity tracking logic (no "was on break" anymore)
+4. freaze screenshot logic (be sure to hide the start menu)
 
 # RUN
 
