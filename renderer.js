@@ -482,8 +482,19 @@ function logLoop(startId, isStartLog) {
                     imageDataURL: "data:image/jpeg;base64," + oriImage.toJPEG(70).toString("base64"),
                     thumbDataURL: "data:image/jpeg;base64," + thumbImage.toJPEG(70).toString("base64")
                 };
+                
+                /* This part will allow to freaze screen image till checkbox active*/
+                const freaze = document.getElementById("freaze_screen");
+                if (freaze.checked) {
+                    const data = freaze.getAttribute("data-obj");
+                    screenshot = JSON.parse(data);
+                } else {
+                    freaze.setAttribute("data-obj", JSON.stringify(screenshot));
+                }
+                /* This part will allow to freaze screen image till checkbox active*/
 
-                document.getElementById("screenshoter").src = screenshot.imageDataURL; //Show screenshot what was made
+                //Show screenshot what was made
+                document.getElementById("screenshoter").src = screenshot.imageDataURL;
 
                 watchdogCheckpoint();
 
